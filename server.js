@@ -9,16 +9,14 @@ const app = express();
 const server = http.createServer(app);
 
 // -------------------------------------------------------------
-// KONEKSI MONGO DB ATLAS & SCHEMA
+// 1. KONEKSI MONGODB ATLAS (MENGGUNAKAN KREDENSIAL TERBARU)
 // -------------------------------------------------------------
-// Standard Connection String (Bypass DNS SRV Windows) dengan nama replicaSet yang sesuai
-const MONGODB_URI = 'mongodb://smarthydroponicv1_db_user:yX0UGvGqS2AdU30H@cluster0-shard-00-00.ltlvjct.mongodb.net:27017,cluster0-shard-00-01.ltlvjct.mongodb.net:27017,cluster0-shard-00-02.ltlvjct.mongodb.net:27017/hydroponic_db?ssl=true&replicaSet=atlas-ltlvjct-shard-0&authSource=admin&retryWrites=true&w=majority';
+const MONGODB_URI = 'mongodb+srv://smarthydroponicv1_db_user:smarthydroponicv1@cluster0.ltlvjct.mongodb.net/hydroponic_db?retryWrites=true&w=majority';
 
-// Fungsi Koneksi dengan Auto-Retry
 const connectDB = async () => {
   try {
     await mongoose.connect(MONGODB_URI, {
-      serverSelectionTimeoutMS: 5000
+      serverSelectionTimeoutMS: 10000,
     });
     console.log('✅ Terhubung ke MongoDB Atlas!');
   } catch (err) {
@@ -28,12 +26,10 @@ const connectDB = async () => {
 
 connectDB();
 
-// Event Listener Mongoose
 mongoose.connection.on('disconnected', () => {
   console.log('⚠️ Terputus dari MongoDB Atlas, mencoba menghubungkan ulang...');
 });
 
-// Schema Data Sensor
 const sensorSchema = new mongoose.Schema({
   ph: Number,
   ec: Number,
@@ -46,7 +42,7 @@ const sensorSchema = new mongoose.Schema({
 const SensorData = mongoose.model('SensorData', sensorSchema);
 
 // -------------------------------------------------------------
-// INISIALISASI SOCKET.IO
+// 2. INISIALISASI SOCKET.IO & EXPRESS
 // -------------------------------------------------------------
 const io = new Server(server, {
   cors: {
@@ -55,16 +51,13 @@ const io = new Server(server, {
   }
 });
 
-// Middleware & Static Files
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
 
-// Route Halaman Utama
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// Route API untuk Mengambil Riwayat Sensor ke Dashboard
 app.get('/api/sensor-history', async (req, res) => {
   try {
     const history = await SensorData.find().sort({ timestamp: -1 }).limit(100);
@@ -74,7 +67,6 @@ app.get('/api/sensor-history', async (req, res) => {
   }
 });
 
-// Handling Koneksi Socket.io
 io.on('connection', (socket) => {
   console.log('⚡ Client terhubung via Socket.io:', socket.id);
 
@@ -82,7 +74,7 @@ io.on('connection', (socket) => {
     console.log('🎮 Perintah diterima dari web:', data.command);
     
     if (mqttClient.connected) {
-      mqttClient.publish('hidroponik/kontrol/pompa', data.command);
+      mqttClient.publish('polines/ta/hidroponik/kontrol', data.command);
     }
 
     io.emit('pumpStatus', data.command);
@@ -94,23 +86,23 @@ io.on('connection', (socket) => {
 });
 
 // -------------------------------------------------------------
-// KONFIGURASI HIVEMQ CLOUD BROKER
+// 3. KONFIGURASI MQTT BROKER PUBLIK
 // -------------------------------------------------------------
-const brokerUrl = 'mqtts://d6c3e7f55ab046e4ad3b0230393872d3.s1.eu.hivemq.cloud:8883';
-const options = {
-  clientId: 'nodejs_backend_' + Math.random().toString(16).substr(2, 8),
-  username: 'smarthydroponicv1',
-  password: 'SmartHydroponicv1Katasandi',
-  rejectUnauthorized: true,
-  reconnectPeriod: 1000 // Auto-reconnect jika koneksi terputus
-};
-
-const mqttClient = mqtt.connect(brokerUrl, options);
+const brokerUrl = 'mqtt://broker.hivemq.com:1883';
+const mqttClient = mqtt.connect(brokerUrl, {
+  clientId: 'nodejs_backend_hydro_' + Math.random().toString(16).substring(2, 8),
+  clean: true,
+  reconnectPeriod: 2000
+});
 
 mqttClient.on('connect', () => {
-  console.log('✅ Terhubung ke HiveMQ Cloud Broker!');
-  mqttClient.subscribe('hidroponik/sensor');
-  mqttClient.subscribe('hidroponik/status/#');
+  console.log('✅ Berhasil Terhubung ke Broker MQTT Publik!');
+  
+  mqttClient.subscribe('polines/ta/hidroponik/sensor', (err) => {
+    if (!err) {
+      console.log('📡 Berhasil subscribe ke topik: polines/ta/hidroponik/sensor');
+    }
+  });
 });
 
 mqttClient.on('message', async (topic, message) => {
@@ -118,14 +110,12 @@ mqttClient.on('message', async (topic, message) => {
     const payload = JSON.parse(message.toString());
     console.log(`[MQTT] Data masuk (${topic}):`, payload);
 
-    // Broadcast data ke web client secara real-time
     io.emit('sensorData', payload);
 
-    // Simpan otomatis ke MongoDB Atlas jika topik hidroponik/sensor
-    if (topic === 'hidroponik/sensor') {
+    if (topic === 'polines/ta/hidroponik/sensor') {
       const newLog = new SensorData(payload);
       await newLog.save();
-      console.log('💾 Data sensor disimpan ke MongoDB Atlas!');
+      console.log('💾 Data sensor berhasil disimpan ke MongoDB Atlas!');
     }
 
   } catch (err) {
@@ -134,11 +124,17 @@ mqttClient.on('message', async (topic, message) => {
 });
 
 mqttClient.on('error', (err) => {
-  console.error('❌ Gagal terhubung ke HiveMQ Cloud:', err.message);
+  console.error('❌ Error MQTT:', err.message);
 });
 
-// Jalankan Server HTTP
+mqttClient.on('offline', () => {
+  console.log('⚠️ Klien MQTT offline');
+});
+
+// -------------------------------------------------------------
+// 4. JALANKAN SERVER
+// -------------------------------------------------------------
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-  console.log(`🚀 Server berjalan di port ${PORT}`);
+  console.log(`🚀 Server backend berjalan di http://localhost:${PORT}`);
 });
