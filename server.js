@@ -9,7 +9,7 @@ const app = express();
 const server = http.createServer(app);
 
 // -------------------------------------------------------------
-// 1. KONEKSI MONGODB ATLAS (MENGGUNAKAN KREDENSIAL TERBARU)
+// 1. KONEKSI MONGODB ATLAS
 // -------------------------------------------------------------
 const MONGODB_URI = 'mongodb+srv://smarthydroponicv1_db_user:smarthydroponicv1@cluster0.ltlvjct.mongodb.net/hydroponic_db?retryWrites=true&w=majority';
 
@@ -86,7 +86,7 @@ io.on('connection', (socket) => {
 });
 
 // -------------------------------------------------------------
-// 3. KONFIGURASI MQTT BROKER PUBLIK
+// 3. KONFIGURASI MQTT BROKER PUBLIK (TANPA AUTH)
 // -------------------------------------------------------------
 const brokerUrl = 'mqtt://broker.hivemq.com:1883';
 const mqttClient = mqtt.connect(brokerUrl, {
