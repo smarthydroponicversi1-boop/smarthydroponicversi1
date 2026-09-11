@@ -19,6 +19,37 @@
       padding: 20px;
       color: #333;
     }
+
+    /* Styling Banner Informasi & Warning Slideshow di Atas */
+    .info-banner-container {
+      background: linear-gradient(135deg, #f39c12, #e67e22);
+      color: white;
+      padding: 12px 20px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+      text-align: center;
+      font-weight: bold;
+      font-size: 14px;
+      overflow: hidden;
+      position: relative;
+      min-height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .info-slide {
+      display: none;
+      animation: fadeIn 0.6s ease-in-out;
+    }
+    .info-slide.active {
+      display: block;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(5px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
     h1 {
       text-align: center;
       margin-bottom: 5px;
@@ -34,7 +65,7 @@
     }
     .status-online { color: #2ecc71; }
     .status-offline { color: #e74c3c; }
-    
+
     .nav-tabs {
       display: flex;
       justify-content: center;
@@ -130,7 +161,7 @@
       font-weight: bold;
       color: #333;
     }
-    
+
     /* Input & Button Dosing Style */
     .dosing-group {
       display: flex;
@@ -258,7 +289,7 @@
       font-weight: bold;
       cursor: pointer;
     }
-    
+
     .table-container {
       background: white;
       padding: 20px;
@@ -286,6 +317,18 @@
   </style>
 </head>
 <body>
+
+  <!-- BANNER SLIDESHOW INFORMASI & WARNING (8 POIN DI ATAS SEBELUM JUDUL) -->
+  <div class="info-banner-container" id="infoBanner">
+    <div class="info-slide active">⚠️ <b>Warning 1:</b> Pastikan koneksi internet dan broker MQTT stabil sebelum menjalankan sistem hidroponik.</div>
+    <div class="info-slide">💡 <b>Warning 2:</b> Periksa ketersediaan cairan nutrisi A dan B pada tangki sebelum melakukan perintah dosing otomatis.</div>
+    <div class="info-slide">📊 <b>Fitur 1:</b> Pemantauan Suhu Air, pH, dan EC secara real-time melalui grafik interaktif Chart.js.</div>
+    <div class="info-slide">🎛️ <b>Fitur 2:</b> Kontrol aktuator manual (Pompa Utama, Pompa Nutrisi A/B, dan Solenoid Valve) via sakelar toggle.</div>
+    <div class="info-slide">💧 <b>Fitur 3:</b> Pengaturan presisi volume dosing nutrisi dalam satuan mililiter (mL) secara satuan maupun simultan.</div>
+    <div class="info-slide">🟢 <b>Fitur 4:</b> Indikator status operasional *Pilot Lamp* real-time untuk memantau aktuator yang sedang aktif.</div>
+    <div class="info-slide">💾 <b>Fitur 5:</b> Pencatatan riwayat data sensor otomatis yang tersimpan aman di dalam database lokal SQLite.</div>
+    <div class="info-slide">📅 <b>Fitur 6:</b> Fitur filter pencarian data historis berdasarkan tanggal untuk memudahkan evaluasi dan rekapitulasi.</div>
+  </div>
 
   <h1>Smart Hydroponic Dashboard</h1>
   <div class="status-container">
@@ -327,11 +370,11 @@
   <!-- SLIDE 2: KONTROL POMPA & DOSING -->
   <div id="slide2" class="tab-content">
     <div class="control-grid">
-      
+
       <!-- Panel 1: Status Operasional Lampu Pilot -->
       <div class="panel-box">
         <div class="panel-title">Status Operasional (Pilot Lamp)</div>
-        
+
         <div class="control-row">
           <span class="control-label">Pompa Utama (Sirkulasi)</span>
           <div class="pilot-status">
@@ -396,7 +439,7 @@
       <!-- Panel 3: Sakelar Switch Toggle Control Manual -->
       <div class="panel-box">
         <div class="panel-title">Kontrol Manual Sakelar</div>
-        
+
         <div class="control-row">
           <span class="control-label">Sakelar Pompa Utama</span>
           <label class="switch">
@@ -435,7 +478,7 @@
 
   <!-- SLIDE 3: RIWAYAT DATA -->
   <div id="slide3" class="tab-content">
-    
+
     <!-- Filter Tanggal -->
     <div class="filter-card">
       <label style="font-weight: bold;">Pilih Tanggal:</label>
@@ -482,6 +525,15 @@
   </div>
 
   <script>
+    // 0. SCRIPT SLIDESHOW BANNER INFORMASI OTOMATIS
+    let currentInfoSlide = 0;
+    const infoSlides = document.querySelectorAll('.info-slide');
+    setInterval(() => {
+      infoSlides[currentInfoSlide].classList.remove('active');
+      currentInfoSlide = (currentInfoSlide + 1) % infoSlides.length;
+      infoSlides[currentInfoSlide].classList.add('active');
+    }, 4500); // Berganti setiap 4.5 detik
+
     // 1. TAB SWITCHING
     function openTab(tabId, btnElement) {
       document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
@@ -515,7 +567,7 @@
       mqttStatusText.className = 'status-online';
       mqttStatusText.innerText = '● CONNECTED';
       console.log('Terhubung ke Broker MQTT EMQX!');
-      
+
       // Subscribe topic status dari ESP32 / Node-RED
       mqttClient.subscribe('hidroponik/dosing/status');
     });
@@ -563,12 +615,12 @@
     const chartPH = new Chart(ctxPH, configChart('pH', '#3498db'));
     const chartEC = new Chart(ctxEC, configChart('EC (mS/cm)', '#2ecc71'));
 
-    // Receive Real-time Data via Socket.io
+    // Receive Real-time Data via Socket.io (Diperbarui menggunakan suhuAir)
     socket.on('sensorData', (data) => {
       const now = new Date().toLocaleTimeString();
-      if (data.temp !== undefined) {
-        document.getElementById('val-temp').innerText = `${data.temp} °C`;
-        updateChart(chartTemp, now, data.temp);
+      if (data.suhuAir !== undefined) {
+        document.getElementById('val-temp').innerText = `${data.suhuAir} °C`;
+        updateChart(chartTemp, now, data.suhuAir);
       }
       if (data.ph !== undefined) {
         document.getElementById('val-ph').innerText = data.ph;
@@ -596,7 +648,7 @@
       if (!inputVol || inputVol <= 0) return alert('Masukkan volume yang valid!');
 
       const payload = `${pompa}:${inputVol}`; // Format: A:10 / B:10
-      
+
       // Kirim via MQTT
       if (mqttClient.connected) {
         mqttClient.publish('hidroponik/dosing/set', payload);
@@ -613,7 +665,7 @@
       if (!volA || !volB || volA <= 0 || volB <= 0) return alert('Masukkan volume A dan B yang valid!');
 
       const payload = `AB:${volA}:${volB}`; // Format: AB:10:10
-      
+
       // Kirim via MQTT
       if (mqttClient.connected) {
         mqttClient.publish('hidroponik/dosing/set', payload);
@@ -627,7 +679,7 @@
     // 6. TOGGLE SAKELAR MANUAL
     function toggleActuator(device, isChecked) {
       const command = `${device.toUpperCase()}_${isChecked ? 'ON' : 'OFF'}`;
-      
+
       // Emisi Socket.io
       socket.emit('controlCommand', { command: command, device: device, state: isChecked });
 

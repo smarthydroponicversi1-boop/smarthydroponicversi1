@@ -1,29 +1,27 @@
 const mqtt = require('mqtt');
 
-// Menggunakan broker publik gratis HiveMQ untuk uji coba script
-const brokerUrl = 'mqtt://broker.hivemq.com:1883';
-
-console.log('Mencoba menghubungkan ke broker publik HiveMQ...');
-const client = mqtt.connect(brokerUrl, {
-  clientId: 'test_node_' + Math.random().toString(16).substring(2, 8)
+const client = mqtt.connect('mqtt://broker.hivemq.com:1883', {
+  clientId: 'simulator_esp32_' + Math.random().toString(16).substring(2, 8)
 });
 
 client.on('connect', () => {
-  console.log('✅ BERHASIL TERHUBUNG KE BROKER PUBLIK!');
-  
-  // Coba test publish & subscribe sederhana
-  client.subscribe('polines/ta/test', (err) => {
-    if (!err) {
-      client.publish('polines/ta/test', 'Halo dari Node.js Mahes!');
-    }
-  });
-});
+  console.log('📡 Simulator ESP32 terhubung ke broker MQTT!');
 
-client.on('message', (topic, payload) => {
-  console.log(`📩 Pesan diterima di [${topic}]:`, payload.toString());
-  client.end();
-});
+  const sampleData = {
+    ph: 6.5,
+    ec: 1.2,
+    suhu: 28.5,
+    kelembaban: 75.0,
+    volume: 85.0
+  };
 
-client.on('error', (err) => {
-  console.error('❌ GAGAL KONEKSI:', err.message);
+  setInterval(() => {
+    client.publish('polines/ta/hidroponik/sensor', JSON.stringify(sampleData), (err) => {
+      if (!err) {
+        console.log('📤 Data sensor berhasil dikirim ke MQTT:', sampleData);
+      } else {
+        console.error('❌ Gagal mengirim data:', err);
+      }
+    });
+  }, 5000);
 });
